@@ -44,8 +44,8 @@ export function buildServer(): { server: McpServer; ctx: ToolContext } {
         logging: {},
       },
       instructions:
-        "Control a single Mineflayer Minecraft bot. Call connect_bot first; then use movement/mining/crafting/combat/etc. " +
-        "Poll get_events (with the returned nextSince) and get_state for game updates. Block/item/entity arguments accept human names. " +
+        "Control a single Mineflayer Minecraft bot. If a default account is configured (via `awesome-mineflayer-mcp setup` or MCP_DEFAULT_* env vars) the bot auto-connects on startup — check get_connection_status; otherwise call connect_bot (explicit credentials) or connect_default (the configured account). " +
+        "Then use movement/mining/crafting/combat/etc. Poll get_events (with the returned nextSince) and get_state for game updates. Block/item/entity arguments accept human names. " +
         "Disable tool groups you don't need via the MCP_DISABLE_GROUPS env var.",
     },
   );

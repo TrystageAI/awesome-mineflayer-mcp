@@ -3,6 +3,8 @@
 import { z } from "zod";
 import type { Registrar } from "./registry.js";
 import type { ConnectOptions } from "../bot/manager.js";
+import { ToolError } from "../util/errors.js";
+import { resolveDefaultConnect } from "../account-config.js";
 
 export function registerLifecycle(reg: Registrar): void {
   reg({
@@ -85,5 +87,50 @@ export function registerLifecycle(reg: Registrar): void {
     inputSchema: {},
     annotations: { readOnlyHint: true, title: "Connection status" },
     handler: (_args, ctx) => ctx.manager.statusReport(),
+  });
+
+  reg({
+    name: "connect_default",
+    group: "lifecycle",
+    description:
+      "Connect using the pre-configured default account (from `awesome-mineflayer-mcp setup` or MCP_DEFAULT_* env vars). Takes no arguments. The server already auto-connects on startup when configured; use this to reconnect the default after a manual disconnect. Errors if no default is configured.",
+    inputSchema: {},
+    annotations: { openWorldHint: true, title: "Connect default account" },
+    handler: async (_args, ctx) => {
+      const def = resolveDefaultConnect();
+      if (!def.opts) {
+        throw new ToolError(
+          "INVALID_ARGS",
+          "No default account is configured. Run `awesome-mineflayer-mcp setup`, or set MCP_DEFAULT_HOST and MCP_DEFAULT_USERNAME.",
+        );
+      }
+      return ctx.manager.connect(def.opts);
+    },
+  });
+
+  reg({
+    name: "get_default_account",
+    group: "lifecycle",
+    description:
+      "Show the configured default account used for autonomous startup (host, port, username, auth mode, autoConnect). No passwords are stored or returned.",
+    inputSchema: {},
+    annotations: { readOnlyHint: true, title: "Get default account" },
+    handler: () => {
+      const def = resolveDefaultConnect();
+      if (!def.account) return { configured: false };
+      const a = def.account;
+      return {
+        configured: true,
+        source: def.source,
+        autoConnect: def.autoConnect,
+        host: a.host,
+        port: a.port ?? 25565,
+        username: a.username,
+        auth: a.auth,
+        version: a.version ?? "auto",
+        autoReconnect: a.autoReconnect ?? true,
+        profilesFolder: a.profilesFolder ?? null,
+      };
+    },
   });
 }
