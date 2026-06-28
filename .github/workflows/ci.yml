@@ -7,6 +7,10 @@ on:
   pull_request:
     branches: [main]
 
+# Least privilege by default; the publish job widens this for OIDC below.
+permissions:
+  contents: read
+
 jobs:
   build-test:
     name: Build & test (Node ${{ matrix.node }})
@@ -28,20 +32,28 @@ jobs:
       - run: npm test
 
   publish:
-    name: Publish to npm
+    name: Publish to npm (OIDC trusted publishing)
     needs: build-test
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
+    permissions:
+      # `id-token: write` lets the job mint the OIDC token npm uses to
+      # authenticate via trusted publishing — no NPM_TOKEN secret required.
+      id-token: write
+      contents: read
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          # OIDC trusted publishing requires Node >= 22.14.0.
+          node-version: "22"
           registry-url: "https://registry.npmjs.org"
           cache: npm
+      # Trusted publishing requires npm CLI >= 11.5.1, newer than the bundled npm.
+      - run: npm install -g npm@latest
       - run: npm ci
       - run: npm run build
-      # Requires an NPM_TOKEN repository secret (npm automation token).
-      - run: npm publish --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      # No NODE_AUTH_TOKEN: authentication is via the OIDC id-token.
+      # Provenance attestations are generated automatically under trusted
+      # publishing, so no --provenance flag is needed.
+      - run: npm publish
