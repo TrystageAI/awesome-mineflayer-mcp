@@ -7,13 +7,13 @@ A tagged release publishes to **four** places, all driven by
 |---|---|---|---|
 | **npm** | `publish` | OIDC trusted publishing (no secret) | `awesome-mineflayer-mcp` on npm, with provenance |
 | **GHCR** (Docker) | `publish-docker` | built-in `GITHUB_TOKEN` | `ghcr.io/g0osey99/awesome-mineflayer-mcp:<version>` + `:latest` |
-| **MCP Registry** | `publish-mcp` | GitHub OIDC (no secret) | `io.github.g0osey99/awesome-mineflayer-mcp` listed |
+| **MCP Registry** | `publish-mcp` | GitHub OIDC (no secret) | `io.github.G0Osey99/awesome-mineflayer-mcp` listed |
 | **Smithery** | (auto, on connect) | Smithery ↔ GitHub | reads [`smithery.yaml`](smithery.yaml) |
 
 ## One-time setup (per repo/account)
 
 1. **npm trusted publishing.** On npmjs.com → the package's **Settings → Trusted Publishing**, add a GitHub Actions publisher: repo `G0Osey99/awesome-mineflayer-mcp`, workflow `ci.yml`. (First publish of a brand-new name may need a manual `npm publish` once — see Manual fallback.) Requires npm CLI ≥ 11.5.1 and Node ≥ 22.14 (the workflow installs `npm@latest`).
-2. **MCP Registry namespace.** The `io.github.g0osey99/*` namespace is authorized automatically for Actions running in a repo owned by that GitHub account. The namespace uses your **lowercased GitHub login** — confirm `g0osey99` matches yours (it appears in `server.json` `name`, `package.json` `mcpName`, and the Dockerfile label; all three must match exactly).
+2. **MCP Registry namespace.** The `io.github.G0Osey99/*` namespace is authorized automatically for Actions running in a repo owned by that GitHub account. The namespace uses your GitHub login with its **exact casing** (`G0Osey99`, not lowercased) — it must match in `server.json` `name`, `package.json` `mcpName`, and the Dockerfile label, all three identical and case-sensitive. (Note: this is *different* from the GHCR image path `ghcr.io/g0osey99/…`, which GHCR lowercases.)
 3. **GHCR.** Nothing to configure; the workflow pushes with `GITHUB_TOKEN` (`packages: write`). After the first push, optionally set the GHCR package to **public** (GitHub → your packages → Package settings).
 4. **Smithery.** Sign in at [smithery.ai](https://smithery.ai) with GitHub and **add/connect this repo**; Smithery reads `smithery.yaml`.
 

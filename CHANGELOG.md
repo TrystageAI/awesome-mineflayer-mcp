@@ -3,6 +3,15 @@
 All notable changes to this project are documented here. This project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [1.3.2]
+
+### Fixed
+
+- **MCP Registry namespace casing.** The registry authorizes the GitHub login
+  with its exact casing (`io.github.G0Osey99/*`), not lowercased. Corrected the
+  server name / `mcpName` / Dockerfile label to `io.github.G0Osey99/awesome-mineflayer-mcp`.
+  (The GHCR image path stays lowercase, as GHCR requires.)
+
 ## [1.3.1]
 
 ### Fixed

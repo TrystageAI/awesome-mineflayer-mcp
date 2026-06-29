@@ -23,7 +23,7 @@ ENV NODE_ENV=production
 LABEL org.opencontainers.image.source="https://github.com/G0Osey99/awesome-mineflayer-mcp" \
       org.opencontainers.image.description="MCP server for standalone-equivalent control of a Mineflayer Minecraft bot." \
       org.opencontainers.image.licenses="MIT" \
-      io.modelcontextprotocol.server.name="io.github.g0osey99/awesome-mineflayer-mcp"
+      io.modelcontextprotocol.server.name="io.github.G0Osey99/awesome-mineflayer-mcp"
 
 COPY package.json package-lock.json ./
 # --ignore-scripts so `prepare` (build) doesn't run here (dist is copied from the
