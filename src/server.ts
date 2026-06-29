@@ -9,6 +9,7 @@ import { BotManager } from "./bot/manager.js";
 import type { ToolContext } from "./context.js";
 import { makeRegistrar } from "./tools/registry.js";
 import { registerResources } from "./resources/register.js";
+import { registerPrompts } from "./prompts/register.js";
 
 import { registerLifecycle } from "./tools/lifecycle.js";
 import { registerStateInspect } from "./tools/state-inspect.js";
@@ -33,6 +34,10 @@ import { registerChat } from "./tools/chat.js";
 import { registerSettings } from "./tools/settings.js";
 import { registerCreative } from "./tools/creative.js";
 import { registerEvents } from "./tools/events.js";
+import { registerVision } from "./tools/vision.js";
+import { registerWaypoints } from "./tools/waypoints.js";
+import { registerBuild } from "./tools/build.js";
+import { registerRaw } from "./tools/raw.js";
 
 export function buildServer(): { server: McpServer; ctx: ToolContext } {
   const server = new McpServer(
@@ -41,6 +46,7 @@ export function buildServer(): { server: McpServer; ctx: ToolContext } {
       capabilities: {
         tools: {},
         resources: { subscribe: true, listChanged: false },
+        prompts: {},
         logging: {},
       },
       instructions:
@@ -80,8 +86,13 @@ export function buildServer(): { server: McpServer; ctx: ToolContext } {
   registerSettings(reg);
   registerCreative(reg);
   registerEvents(reg);
+  registerVision(reg);
+  registerWaypoints(reg);
+  registerBuild(reg);
+  registerRaw(reg, ctx);
 
   registerResources(ctx);
+  registerPrompts(ctx);
 
   return { server, ctx };
 }

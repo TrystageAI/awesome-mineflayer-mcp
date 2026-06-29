@@ -7,6 +7,7 @@ import { coordsShape, itemRef } from "../schemas/common.js";
 import { ToolError } from "../util/errors.js";
 import { resolveItem } from "../util/resolve.js";
 import { serializeItem } from "../util/serialize.js";
+import { DEFAULT_ACTION_TIMEOUT_MS } from "../config.js";
 
 /** Compact snapshot of a furnace's three slots + fuel/smelt progress. */
 function furnaceStatus(f: any): Record<string, unknown> {
@@ -27,6 +28,7 @@ export function registerFurnace(reg: Registrar): void {
       "Open the furnace (or blast furnace / smoker) at the given coordinates and return its current contents. Keeps the window open for subsequent furnace_action / furnace_status calls.",
     inputSchema: { ...coordsShape },
     annotations: { title: "Open furnace" },
+    timeoutMs: DEFAULT_ACTION_TIMEOUT_MS,
     handler: async (args, ctx) => {
       const bot = ctx.manager.requireBot();
       const block = bot.blockAt(new Vec3(args.x, args.y, args.z));
@@ -51,6 +53,7 @@ export function registerFurnace(reg: Registrar): void {
       count: z.number().int().min(1).optional().describe("Count to put (default 1; ignored for take)"),
     },
     annotations: { title: "Furnace put/take" },
+    timeoutMs: DEFAULT_ACTION_TIMEOUT_MS,
     handler: async (args, ctx) => {
       const bot = ctx.manager.requireBot();
       const f = ctx.windows.requireFurnace();

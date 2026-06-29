@@ -7,6 +7,14 @@ import { itemRef } from "../schemas/common.js";
 import { ToolError } from "../util/errors.js";
 import { resolveItem } from "../util/resolve.js";
 import { serializeItem } from "../util/serialize.js";
+import { DEFAULT_ACTION_TIMEOUT_MS } from "../config.js";
+
+/** Guard against acting on a window that has since closed (event missed / race). */
+function assertWindowOpen(bot: unknown): void {
+  if (!(bot as { currentWindow?: unknown }).currentWindow) {
+    throw new ToolError("NO_WINDOW", "The container window is no longer open. Re-open it first.");
+  }
+}
 
 export function registerContainers(reg: Registrar): void {
   reg({
@@ -29,6 +37,7 @@ export function registerContainers(reg: Registrar): void {
         .describe("Optional cursor position on the block face"),
     },
     annotations: { title: "Open container" },
+    timeoutMs: DEFAULT_ACTION_TIMEOUT_MS,
     handler: async (args, ctx) => {
       const bot = ctx.manager.requireBot();
       let target: unknown;
@@ -85,9 +94,11 @@ export function registerContainers(reg: Registrar): void {
       metadata: z.number().int().optional().describe("Optional item metadata to match"),
     },
     annotations: { title: "Deposit into container" },
+    timeoutMs: DEFAULT_ACTION_TIMEOUT_MS,
     handler: async (args, ctx) => {
       const bot = ctx.manager.requireBot();
       const win = ctx.windows.requireContainer() as any;
+      assertWindowOpen(bot);
       const id = resolveItem(bot.registry as any, args.item).id;
       await win.deposit(id, args.metadata ?? null, args.count ?? null);
       return { ok: true };
@@ -105,9 +116,11 @@ export function registerContainers(reg: Registrar): void {
       metadata: z.number().int().optional().describe("Optional item metadata to match"),
     },
     annotations: { title: "Withdraw from container" },
+    timeoutMs: DEFAULT_ACTION_TIMEOUT_MS,
     handler: async (args, ctx) => {
       const bot = ctx.manager.requireBot();
       const win = ctx.windows.requireContainer() as any;
+      assertWindowOpen(bot);
       const id = resolveItem(bot.registry as any, args.item).id;
       await win.withdraw(id, args.metadata ?? null, args.count ?? null);
       return { ok: true };

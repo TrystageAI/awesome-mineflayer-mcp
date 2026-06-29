@@ -67,6 +67,55 @@ export function registerStateInspect(reg: Registrar): void {
   });
 
   reg({
+    name: "get_observation",
+    group: "state",
+    description:
+      "One-call situational snapshot for an agent's observe loop: connection status, self vitals/position, held item + inventory, nearby entities, and recent/new events. Replaces calling get_state + get_inventory + list_entities + get_events separately. Pass `since` (a prior events.nextSince) to get only new events; otherwise a recent tail is returned with nextSince to start paginating.",
+    inputSchema: {
+      includeEntities: z.boolean().optional().describe("Include nearby entities (default true)"),
+      entityRadius: z.number().min(0).optional().describe("Max distance for nearby entities (default 16)"),
+      entityLimit: z.number().int().min(1).max(100).optional().describe("Max entities (default 10)"),
+      includeEvents: z.boolean().optional().describe("Include events (default true)"),
+      since: z.number().int().optional().describe("Only events with seq greater than this (from a prior nextSince)"),
+      eventLimit: z.number().int().min(1).max(200).optional().describe("Max events (default 20)"),
+      ...formatShape,
+    },
+    annotations: { readOnlyHint: true, title: "Get observation" },
+    handler: (args, ctx) => {
+      const bot = ctx.manager.requireBot();
+      const detailed = args.format === "detailed";
+      const inv = inventoryState(bot, detailed);
+      const obs: Record<string, unknown> = {
+        status: ctx.manager.status,
+        self: selfState(bot, detailed),
+        heldItem: inv.heldItem,
+        heldSlot: inv.heldSlot,
+        items: inv.items,
+        emptySlots: inv.emptySlots,
+      };
+      if (args.includeEntities !== false) {
+        obs.entities = entitiesState(
+          bot,
+          { maxDistance: args.entityRadius ?? 16 },
+          args.entityLimit ?? 10,
+          detailed,
+        );
+      }
+      if (args.includeEvents !== false) {
+        const eventLimit = args.eventLimit ?? 20;
+        if (args.since !== undefined) {
+          const d = ctx.events.drain({ since: args.since, limit: eventLimit });
+          obs.events = { count: d.events.length, nextSince: d.nextSince, dropped: d.dropped, events: d.events };
+        } else {
+          const tail = ctx.events.recent(eventLimit);
+          obs.events = { count: tail.length, nextSince: ctx.events.lastSeq, dropped: false, events: tail };
+        }
+      }
+      return obs;
+    },
+  });
+
+  reg({
     name: "list_players",
     group: "state",
     description:

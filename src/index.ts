@@ -11,6 +11,15 @@ import { buildServer } from "./server.js";
 import { SERVER_NAME, SERVER_VERSION, listDisabledGroups } from "./config.js";
 import { runSetup } from "./setup.js";
 import { resolveDefaultConnect } from "./account-config.js";
+import { disposeScreenshot } from "./bot/screenshot.js";
+
+// stdout is the MCP protocol channel. Some dependencies (e.g. prismarine-viewer)
+// log via console.log — route those to stderr so they can't corrupt the stream.
+console.log = (...args: unknown[]): void => {
+  process.stderr.write(args.map(String).join(" ") + "\n");
+};
+console.info = console.log;
+console.debug = console.log;
 
 async function main(): Promise<void> {
   // `awesome-mineflayer-mcp setup` runs the interactive account setup instead
@@ -19,6 +28,18 @@ async function main(): Promise<void> {
     await runSetup();
     return;
   }
+
+  // Last-resort safety net: a stray rejection from a fire-and-forget mineflayer
+  // / plugin call must never take down a long-running server. Log to stderr
+  // (never stdout — that's the MCP channel) and keep running.
+  process.on("unhandledRejection", (reason) => {
+    process.stderr.write(
+      `[${SERVER_NAME}] unhandledRejection: ${String((reason as Error)?.stack ?? reason)}\n`,
+    );
+  });
+  process.on("uncaughtException", (err) => {
+    process.stderr.write(`[${SERVER_NAME}] uncaughtException: ${String(err?.stack ?? err)}\n`);
+  });
 
   const { server, ctx } = buildServer();
   const transport = new StdioServerTransport();
@@ -34,8 +55,10 @@ async function main(): Promise<void> {
     } catch {
       /* ignore */
     }
-    // Give the quit packet a moment, then exit.
-    setTimeout(() => process.exit(0), 250);
+    // Close the browser/viewer (capped), then give the quit packet a moment and exit.
+    void Promise.race([disposeScreenshot(), new Promise((r) => setTimeout(r, 1500))]).finally(() => {
+      setTimeout(() => process.exit(0), 200);
+    });
   };
   process.on("SIGINT", () => shutdown("SIGINT"));
   process.on("SIGTERM", () => shutdown("SIGTERM"));

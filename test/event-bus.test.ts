@@ -34,8 +34,38 @@ describe("EventBus", () => {
     expect(bus.drain({ types: ["chat"] }).events).toHaveLength(2);
     expect(bus.drain({ types: ["death"] }).events).toHaveLength(1);
     expect(bus.drain({ limit: 1 }).events).toHaveLength(1);
-    // limit keeps the most recent
+    // limit returns the OLDEST unread first (seq 1, "chat")
     expect(bus.drain({ limit: 1 }).events[0]!.type).toBe("chat");
+  });
+
+  it("limit paginates forward without dropping events", () => {
+    const bus = new EventBus(100);
+    bus.push("a"); // seq 1
+    bus.push("b"); // seq 2
+    bus.push("c"); // seq 3
+    // First page: oldest event, cursor rewound to it (NOT to seqCounter).
+    const page1 = bus.drain({ limit: 1 });
+    expect(page1.events.map((e) => e.type)).toEqual(["a"]);
+    expect(page1.nextSince).toBe(1);
+    expect(page1.dropped).toBe(false);
+    // Second page continues from the cursor — no events skipped.
+    const page2 = bus.drain({ since: page1.nextSince, limit: 1 });
+    expect(page2.events.map((e) => e.type)).toEqual(["b"]);
+    expect(page2.nextSince).toBe(2);
+    const page3 = bus.drain({ since: page2.nextSince });
+    expect(page3.events.map((e) => e.type)).toEqual(["c"]);
+    expect(page3.nextSince).toBe(3);
+  });
+
+  it("limit:0 is a no-op that does not skip unread events", () => {
+    const bus = new EventBus(100);
+    bus.push("a"); // seq 1
+    bus.push("b"); // seq 2
+    const zero = bus.drain({ limit: 0 });
+    expect(zero.events).toHaveLength(0);
+    // Re-draining from the returned cursor must still yield everything.
+    const all = bus.drain({ since: zero.nextSince });
+    expect(all.events.map((e) => e.type)).toEqual(["a", "b"]);
   });
 
   it("evicts oldest beyond capacity and reports dropped", () => {

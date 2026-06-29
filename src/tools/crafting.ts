@@ -8,6 +8,8 @@ import type { Registrar } from "./registry.js";
 import { itemRef } from "../schemas/common.js";
 import { ToolError } from "../util/errors.js";
 import { resolveItem, resolveBlock } from "../util/resolve.js";
+import { withTimeout } from "../util/async.js";
+import { DEFAULT_ACTION_TIMEOUT_MS } from "../config.js";
 
 /** Resolve a numeric item id to its registry name (or a fallback string). */
 function itemName(bot: Bot, id: number | null | undefined): string {
@@ -109,7 +111,13 @@ export function registerCrafting(reg: Registrar): void {
       const count = args.count ?? 1;
       const h = ctx.locks.begin("craft_item");
       try {
-        await bot.craft(recipes[0]!, count, (table ?? undefined) as any);
+        // Bound the craft so a stalled server round-trip can't wedge the action
+        // lock forever — the timeout throws, so the finally below releases it.
+        await withTimeout(
+          bot.craft(recipes[0]!, count, (table ?? undefined) as any),
+          DEFAULT_ACTION_TIMEOUT_MS,
+          "craft_item",
+        );
         return { ok: true, crafted: resolved.name, count };
       } catch (e) {
         if (h.signal.aborted) throw new ToolError("CANCELLED", "craft_item was cancelled");

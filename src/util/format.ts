@@ -26,9 +26,23 @@ export function toStringText(data: unknown): string {
   return JSON.stringify(data, jsonReplacer, 2);
 }
 
-/** Drop undefined/function/circular noise that occasionally leaks from game objects. */
+/** Drop function/bigint noise that occasionally leaks from game objects. (Cycles are NOT handled here — JSON.stringify still throws on them; safeClone catches that.) */
 function jsonReplacer(_key: string, value: unknown): unknown {
   if (typeof value === "function") return undefined;
   if (typeof value === "bigint") return value.toString();
   return value;
+}
+
+/**
+ * JSON-safe deep clone (drops functions, stringifies bigint). Returns undefined
+ * if the value can't be serialized (e.g. a circular reference) — callers use
+ * this to populate `structuredContent` without ever risking a serialization
+ * throw turning a successful tool call into an error.
+ */
+export function safeClone(data: unknown): unknown {
+  try {
+    return JSON.parse(JSON.stringify(data, jsonReplacer));
+  } catch {
+    return undefined;
+  }
 }

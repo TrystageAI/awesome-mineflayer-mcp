@@ -5,6 +5,7 @@ import type { Registrar } from "./registry.js";
 import { entityId } from "../schemas/common.js";
 import { ToolError } from "../util/errors.js";
 import { serializeItem } from "../util/serialize.js";
+import { DEFAULT_ACTION_TIMEOUT_MS } from "../config.js";
 
 export function registerVillager(reg: Registrar): void {
   reg({
@@ -16,6 +17,7 @@ export function registerVillager(reg: Registrar): void {
       entityId,
     },
     annotations: { title: "Open villager" },
+    timeoutMs: DEFAULT_ACTION_TIMEOUT_MS,
     handler: async (args, ctx) => {
       const bot = ctx.manager.requireBot();
       const e = bot.entities[args.entityId];
@@ -69,6 +71,7 @@ export function registerVillager(reg: Registrar): void {
       times: z.number().int().min(1).optional().describe("How many times to perform the trade (default 1)"),
     },
     annotations: { title: "Trade with villager" },
+    timeoutMs: DEFAULT_ACTION_TIMEOUT_MS,
     handler: async (args, ctx) => {
       const bot = ctx.manager.requireBot();
       const villager = ctx.windows.requireVillager();

@@ -26,7 +26,12 @@ export interface DrainOptions {
   since?: number;
   /** Restrict to these event types. */
   types?: string[];
-  /** Return at most this many (most recent kept). */
+  /**
+   * Return at most this many events, OLDEST matching first. When more than
+   * `limit` are pending, the surplus is NOT dropped: `nextSince` is set to the
+   * last event actually returned so the remainder is delivered (in order,
+   * without loss) on the next call.
+   */
   limit?: number;
 }
 
@@ -75,10 +80,20 @@ export class EventBus {
       const set = new Set(types);
       out = out.filter((e) => set.has(e.type));
     }
+    // By default the caller has now seen everything up to the latest seq.
+    let nextSince = this.seqCounter;
     if (limit !== undefined && limit >= 0 && out.length > limit) {
-      out = out.slice(out.length - limit);
+      // Forward-paginate: hand back the OLDEST `limit` events and rewind the
+      // cursor to the last one returned, so the remainder is delivered on the
+      // next call instead of being silently skipped (which the previous
+      // "keep newest N, advance to seqCounter" behaviour did).
+      out = out.slice(0, limit);
+      // Advance the cursor only to the last event actually returned. When limit
+      // is 0 (out becomes empty), DON'T jump to seqCounter — that would skip all
+      // unread events; rewind to just before the oldest retained event instead.
+      nextSince = out.length > 0 ? out[out.length - 1]!.seq : (since ?? oldestSeq - 1);
     }
-    return { events: out, nextSince: this.seqCounter, dropped };
+    return { events: out, nextSince, dropped };
   }
 
   /** Most recent `n` events (used to seed the events resource). */

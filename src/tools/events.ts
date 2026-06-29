@@ -19,7 +19,13 @@ export function registerEvents(reg: Registrar): void {
         .array(z.string())
         .optional()
         .describe('Restrict to these event types, e.g. ["chat","death","goal_reached"]'),
-      limit: z.number().int().min(1).max(1000).optional().describe("Max events to return (most recent kept)"),
+      limit: z
+        .number()
+        .int()
+        .min(1)
+        .max(1000)
+        .optional()
+        .describe("Max events to return this call (oldest first); call again with the returned nextSince to get the rest"),
     },
     annotations: { readOnlyHint: true, title: "Get events" },
     handler: (args, ctx) => {

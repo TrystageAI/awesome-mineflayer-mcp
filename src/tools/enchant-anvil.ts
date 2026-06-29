@@ -8,6 +8,7 @@ import { coordsShape, itemRef } from "../schemas/common.js";
 import { ToolError } from "../util/errors.js";
 import { resolveItem } from "../util/resolve.js";
 import { serializeItem } from "../util/serialize.js";
+import { DEFAULT_ACTION_TIMEOUT_MS } from "../config.js";
 
 const READY_TIMEOUT_MS = 10_000;
 
@@ -71,7 +72,8 @@ export function registerEnchantAnvil(reg: Registrar): void {
         .optional()
         .describe("Offer slot to apply (0=top,1=middle,2=bottom). Omit to only read offers."),
     },
-    annotations: { title: "Enchant item" },
+    annotations: { title: "Enchant item", destructiveHint: true },
+    timeoutMs: DEFAULT_ACTION_TIMEOUT_MS,
     handler: async (args, ctx) => {
       const bot = ctx.manager.requireBot();
       const block = bot.blockAt(new Vec3(args.x, args.y, args.z));
@@ -155,7 +157,8 @@ export function registerEnchantAnvil(reg: Registrar): void {
       itemTwo: itemRef.optional().describe("Second item by name/id; omit for a rename-only operation"),
       name: z.string().optional().describe("New name to apply to the result (optional)"),
     },
-    annotations: { title: "Anvil combine/rename" },
+    annotations: { title: "Anvil combine/rename", destructiveHint: true },
+    timeoutMs: DEFAULT_ACTION_TIMEOUT_MS,
     handler: async (args, ctx) => {
       const bot = ctx.manager.requireBot();
       const block = bot.blockAt(new Vec3(args.x, args.y, args.z));

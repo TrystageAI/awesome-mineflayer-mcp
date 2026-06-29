@@ -26,6 +26,11 @@ export type ErrorCode =
   | "NO_WINDOW" // no container/window is currently open
   | "PLUGIN_MISSING" // a required mineflayer plugin is not loaded
   | "UNSUPPORTED" // the action is not supported on this server/version/gamemode
+  | "FORBIDDEN" // blocked by a configured safety policy (command/host allow-deny)
+  | "CONNECT_REFUSED" // could not reach the server (refused / unresolved / unreachable)
+  | "VERSION_MISMATCH" // client/server protocol versions differ
+  | "ONLINE_MODE" // server is in online-mode and rejected the login
+  | "AUTH_FAILED" // authentication (Microsoft/session) failed
   | "INTERNAL"; // an unexpected error
 
 /** An error with a stable code and optional remediation suggestions. */
@@ -66,6 +71,84 @@ export const errors = {
       suggestions,
     ),
 };
+
+/**
+ * Map a raw connection failure reason (kick string / socket error message) to a
+ * specific error code + actionable suggestions, so a login failure isn't an
+ * opaque "INTERNAL". Falls back to INTERNAL for anything unrecognised.
+ */
+export function classifyConnectError(reason: string): { code: ErrorCode; suggestions: string[] } {
+  const r = reason.toLowerCase();
+  const has = (...needles: string[]): boolean => needles.some((n) => r.includes(n));
+
+  if (has("econnrefused", "connection refused")) {
+    return {
+      code: "CONNECT_REFUSED",
+      suggestions: [
+        "Check the host and port are correct and the server is actually running.",
+        "For a local server, confirm it has finished starting and is listening (default port 25565).",
+      ],
+    };
+  }
+  if (has("enotfound", "getaddrinfo", "eai_again", "dns")) {
+    return {
+      code: "CONNECT_REFUSED",
+      suggestions: ["The hostname could not be resolved — double-check the server address."],
+    };
+  }
+  if (has("etimedout", "ehostunreach", "enetunreach")) {
+    return {
+      code: "CONNECT_REFUSED",
+      suggestions: ["The server was unreachable — check the address, port, and any firewall/whitelist."],
+    };
+  }
+  if (has("outdated client", "outdated server", "unsupported protocol", "wrong version", "version is not supported")) {
+    return {
+      code: "VERSION_MISMATCH",
+      suggestions: [
+        "Pass an explicit `version` matching the server (e.g. version:\"1.20.4\") instead of relying on auto-detect.",
+      ],
+    };
+  }
+  if (has("unverified_username", "unverified username", "not whitelisted is set to true", "premium", "online mode", "online-mode")) {
+    return {
+      code: "ONLINE_MODE",
+      suggestions: [
+        "The server is in online-mode: connect with auth:\"microsoft\" (real account), or set online-mode=false on the server for offline auth.",
+      ],
+    };
+  }
+  if (has("multiplayer.disconnect.not_whitelisted", "not whitelisted", "you are not white-listed")) {
+    return {
+      code: "FORBIDDEN",
+      suggestions: ["The bot's account is not on the server whitelist — add it (e.g. /whitelist add <name>)."],
+    };
+  }
+  if (has("banned", "you are banned")) {
+    return { code: "FORBIDDEN", suggestions: ["The bot's account is banned from this server."] };
+  }
+  if (has("invalid session", "bad login", "invalid credentials", "authentication", "msa", "xbox", "failed to authenticate")) {
+    return {
+      code: "AUTH_FAILED",
+      suggestions: [
+        "Re-run `awesome-mineflayer-mcp setup` to refresh the Microsoft token, or clear the profilesFolder cache and sign in again.",
+      ],
+    };
+  }
+  if (has("chat", "signing", "signature", "secure profile")) {
+    return {
+      code: "ONLINE_MODE",
+      suggestions: ["Try connecting with disableChatSigning:true if the server rejects unsigned chat."],
+    };
+  }
+  if (has("keepalive", "timed out", "timeout")) {
+    return {
+      code: "TIMEOUT",
+      suggestions: ["The connection stalled — retry, or raise checkTimeoutInterval / connectTimeoutMs."],
+    };
+  }
+  return { code: "INTERNAL", suggestions: [] };
+}
 
 /** Normalise any thrown value into a `{ code, message, suggestions }` shape. */
 export function toToolError(e: unknown): {

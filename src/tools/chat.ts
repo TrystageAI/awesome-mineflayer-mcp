@@ -3,6 +3,21 @@
 import { z } from "zod";
 import type { Registrar } from "./registry.js";
 import { ToolError } from "../util/errors.js";
+import { CHAT_MIN_INTERVAL_MS, checkCommand } from "../config.js";
+
+// Process-wide spacing of outbound chat/whisper/command sends (anti-spam / kick
+// protection). Single bot per process, so a module-level timestamp suffices.
+// The next slot is RESERVED synchronously (before awaiting) so concurrent calls
+// are spaced into successive slots instead of all firing at once.
+let lastSendAt = 0;
+async function throttleSend(): Promise<void> {
+  if (CHAT_MIN_INTERVAL_MS <= 0) return;
+  const now = Date.now();
+  const at = Math.max(now, lastSendAt + CHAT_MIN_INTERVAL_MS);
+  lastSendAt = at;
+  const wait = at - now;
+  if (wait > 0) await new Promise((r) => setTimeout(r, wait));
+}
 
 export function registerChat(reg: Registrar): void {
   reg({
@@ -14,8 +29,9 @@ export function registerChat(reg: Registrar): void {
       message: z.string().describe("The chat message to send"),
     },
     annotations: { title: "Send chat message" },
-    handler: (args, ctx) => {
+    handler: async (args, ctx) => {
       const bot = ctx.manager.requireBot();
+      await throttleSend();
       bot.chat(args.message);
       return { ok: true };
     },
@@ -30,8 +46,9 @@ export function registerChat(reg: Registrar): void {
       message: z.string().describe("The private message to send"),
     },
     annotations: { title: "Whisper to player" },
-    handler: (args, ctx) => {
+    handler: async (args, ctx) => {
       const bot = ctx.manager.requireBot();
+      await throttleSend();
       bot.whisper(args.username, args.message);
       return { ok: true };
     },
@@ -41,14 +58,19 @@ export function registerChat(reg: Registrar): void {
     name: "run_command",
     group: "chat",
     description:
-      "Run a server slash command. A leading `/` is added automatically if omitted.",
+      "Run a server slash command. A leading `/` is added automatically if omitted. Some administrative commands (op, ban, stop, …) may be blocked by the server's command policy (see MCP_COMMAND_DENY / MCP_COMMAND_ALLOW).",
     inputSchema: {
       command: z.string().describe('The command to run, e.g. "tp @s 0 64 0" or "/time set day"'),
     },
     annotations: { title: "Run command" },
-    handler: (args, ctx) => {
+    handler: async (args, ctx) => {
       const bot = ctx.manager.requireBot();
       const c = args.command.startsWith("/") ? args.command : "/" + args.command;
+      const verdict = checkCommand(c);
+      if (!verdict.allowed) {
+        throw new ToolError("FORBIDDEN", verdict.reason ?? "Command blocked by the command policy.");
+      }
+      await throttleSend();
       bot.chat(c);
       return { ok: true, sent: c };
     },

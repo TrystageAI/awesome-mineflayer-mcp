@@ -8,7 +8,9 @@
  */
 
 import { createBot, type Bot } from "mineflayer";
-import { ToolError } from "../util/errors.js";
+import { ToolError, classifyConnectError } from "../util/errors.js";
+import { checkHost } from "../config.js";
+import { redactSecrets } from "../util/redact.js";
 import type { EventBus } from "./events.js";
 import type { WindowManager } from "./windows.js";
 import type { ActionLocks } from "./action-locks.js";
@@ -110,11 +112,13 @@ export class BotManager {
         `A bot (${this._bot.username}) is already connected. Call disconnect_bot or reconnect_bot first.`,
       );
     }
+    this.assertHostAllowed(opts.host);
     // We may be mid-backoff (status "reconnecting", _bot null): cancel that timer
     // so it can't later spawn a duplicate, orphaned connection.
     this.cancelReconnectTimer();
     this.lastOptions = opts;
     this.reconnectAttempt = 0;
+    this.intentionalQuit = false;
     await this.spawnBot(opts);
     return this.statusReport();
   }
@@ -123,7 +127,16 @@ export class BotManager {
     this.cancelReconnectTimer();
     const bot = this._bot;
     if (!bot) {
-      return { status: this._status, note: "No bot was connected." };
+      // No live bot — but we may have been mid auto-reconnect backoff (status
+      // "reconnecting"). The timer is now cancelled; land the FSM in a terminal
+      // disconnected state so status isn't misreported as "reconnecting" forever.
+      const wasReconnecting = this._status === "reconnecting";
+      this.intentionalQuit = true;
+      this.teardown("disconnected", reason);
+      return {
+        status: this._status,
+        note: wasReconnecting ? "Cancelled pending reconnect." : "No bot was connected.",
+      };
     }
     this.intentionalQuit = true;
     this.locks.cancelAll("manual");
@@ -152,6 +165,7 @@ export class BotManager {
       throw new ToolError("INVALID_ARGS", "No previous connection to reconnect to. Use connect_bot.");
     }
     const opts = { ...this.lastOptions, ...(override ?? {}) };
+    this.assertHostAllowed(opts.host);
     if (this._bot) {
       await this.disconnect("reconnecting", false);
     } else {
@@ -180,6 +194,26 @@ export class BotManager {
   }
 
   // --- internals ---
+
+  private assertHostAllowed(host: string): void {
+    const verdict = checkHost(host);
+    if (!verdict.allowed) {
+      throw new ToolError("FORBIDDEN", verdict.reason ?? `Host '${host}' is not permitted.`);
+    }
+  }
+
+  /** Strip any configured secrets from a reason string before it leaves the process. */
+  private redact(text: string): string {
+    const o = this.lastOptions;
+    return redactSecrets(text, [o?.password, o?.accessToken, o?.clientToken]);
+  }
+
+  /** Build a typed, actionable error from a raw connect/login failure reason. */
+  private connectError(prefix: string, rawReason: string): ToolError {
+    const reason = this.redact(rawReason);
+    const { code, suggestions } = classifyConnectError(reason);
+    return new ToolError(code, `${prefix}: ${reason}`, suggestions.length ? suggestions : undefined);
+  }
 
   private buildBotOptions(opts: ConnectOptions): Record<string, unknown> {
     const o: Record<string, unknown> = {
@@ -218,7 +252,9 @@ export class BotManager {
     this.setStatus("connecting");
     const bot = createBot(this.buildBotOptions(opts) as any);
     this._bot = bot;
-    this.intentionalQuit = false;
+    // NOTE: intentionalQuit is reset by the intentional entry points
+    // (connect/reconnect), NOT here — otherwise a manual disconnect that lands
+    // while an auto-reconnect spawn is in flight would be silently undone.
 
     loadPlugins(bot);
     this.windows.attach(bot);
@@ -246,24 +282,25 @@ export class BotManager {
         if (settled) return;
         settled = true;
         cleanup();
-        this.teardown("disconnected", err?.message ?? "error");
-        reject(new ToolError("INTERNAL", `Failed to connect: ${err?.message ?? String(err)}`));
+        const r = err?.message ?? String(err);
+        this.teardown("disconnected", this.redact(r));
+        reject(this.connectError("Failed to connect", r));
       };
       const onKicked = (reason: unknown): void => {
         if (settled) return;
         settled = true;
         cleanup();
         const r = stringifyReason(reason);
-        this.teardown("disconnected", r);
-        reject(new ToolError("INTERNAL", `Kicked during login: ${r}`));
+        this.teardown("disconnected", this.redact(r));
+        reject(this.connectError("Kicked during login", r));
       };
       const onEnd = (reason: unknown): void => {
         if (settled) return;
         settled = true;
         cleanup();
         const r = stringifyReason(reason);
-        this.teardown("disconnected", r);
-        reject(new ToolError("INTERNAL", `Connection ended during login: ${r}`));
+        this.teardown("disconnected", this.redact(r));
+        reject(this.connectError("Connection ended during login", r));
       };
       const timer = setTimeout(() => {
         if (settled) return;
@@ -290,14 +327,15 @@ export class BotManager {
     bot.on("kicked", (reason: unknown) => {
       // Only act once online; login-window kicks are handled by the spawn Promise.
       if (this._bot !== bot || this._status !== "online") return;
-      this.lastEndReason = `kicked: ${stringifyReason(reason)}`;
-      this.events.push("kicked", { reason: stringifyReason(reason) });
+      const r = this.redact(stringifyReason(reason));
+      this.lastEndReason = `kicked: ${r}`;
+      this.events.push("kicked", { reason: r });
     });
     bot.on("end", (reason: unknown) => {
       // Only act once online; login-window ends are handled by the spawn Promise,
       // so we avoid double-incrementing the reconnect counter / spurious events.
       if (this._bot !== bot || this._status !== "online") return;
-      const r = stringifyReason(reason);
+      const r = this.redact(stringifyReason(reason));
       this.events.push("end", { reason: r });
       if (this.intentionalQuit) {
         this.teardown("disconnected", r);
@@ -313,6 +351,12 @@ export class BotManager {
   }
 
   private scheduleReconnect(): void {
+    if (this.intentionalQuit) {
+      // A manual disconnect / shutdown landed while a reconnect was in flight.
+      // Honour it instead of reconnecting anyway.
+      this.teardown("disconnected", this.lastEndReason);
+      return;
+    }
     this.detachAndClearBot();
     if (this.reconnectAttempt >= MAX_RECONNECT_ATTEMPTS) {
       this.setStatus("disconnected");
@@ -325,7 +369,7 @@ export class BotManager {
     this.events.push("reconnecting", { attempt: this.reconnectAttempt, delayMs: delay });
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = null;
-      if (!this.lastOptions) return;
+      if (!this.lastOptions || this.intentionalQuit) return;
       this.spawnBot(this.lastOptions).then(
         () => {
           this.reconnectAttempt = 0;
