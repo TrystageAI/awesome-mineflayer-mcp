@@ -3,6 +3,19 @@
 All notable changes to this project are documented here. This project adheres to
 [Semantic Versioning](https://semver.org/).
 
+## [1.3.1]
+
+### Fixed
+
+- **Docker image build** (GHCR publish) — the runtime stage ran the `prepare`
+  build script under `--omit=dev`, so `tsc` was missing (exit 127). Build stages
+  now use `--ignore-scripts` and a Node 22 base image.
+- **MCP Registry publish** — shortened `server.json` `description` to the
+  registry's 100-character limit.
+
+(The npm package was published correctly at 1.3.0; this patch only fixes the
+Docker and MCP-registry release steps.)
+
 ## [1.3.0]
 
 ### Added

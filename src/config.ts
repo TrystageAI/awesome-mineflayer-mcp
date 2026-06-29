@@ -7,7 +7,7 @@
  */
 
 export const SERVER_NAME = "awesome-mineflayer-mcp";
-export const SERVER_VERSION = "1.3.0";
+export const SERVER_VERSION = "1.3.1";
 
 function readInt(envVar: string, fallback: number): number {
   const raw = process.env[envVar];
