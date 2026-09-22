@@ -33,12 +33,33 @@ async function main(): Promise<void> {
   // / plugin call must never take down a long-running server. Log to stderr
   // (never stdout — that's the MCP channel) and keep running.
   process.on("unhandledRejection", (reason) => {
-    process.stderr.write(
-      `[${SERVER_NAME}] unhandledRejection: ${String((reason as Error)?.stack ?? reason)}\n`,
-    );
+    try {
+      process.stderr.write(
+        `[${SERVER_NAME}] unhandledRejection: ${String((reason as Error)?.stack ?? reason)}\n`,
+      );
+    } catch { /* stderr also broken */ }
   });
   process.on("uncaughtException", (err) => {
-    process.stderr.write(`[${SERVER_NAME}] uncaughtException: ${String(err?.stack ?? err)}\n`);
+    try {
+      process.stderr.write(`[${SERVER_NAME}] uncaughtException: ${String(err?.stack ?? err)}\n`);
+    } catch { /* stderr also broken */ }
+  });
+
+  // If the stdio pipe to the parent (MCP client) breaks, the server is useless.
+  // Exit cleanly instead of accumulating EPIPE errors in a zombie state.
+  process.stdout.on("error", (err: NodeJS.ErrnoException) => {
+    if (err.code === "EPIPE") {
+      try {
+        process.stderr.write(`[${SERVER_NAME}] stdout EPIPE — parent process gone, exiting.\n`);
+      } catch { /* ignore */ }
+      process.exit(0);
+    }
+    throw err;
+  });
+  process.stderr.on("error", (err: NodeJS.ErrnoException) => {
+    if (err.code === "EPIPE") {
+      process.exit(0);
+    }
   });
 
   const { server, ctx } = buildServer();
