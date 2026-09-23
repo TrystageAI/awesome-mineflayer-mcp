@@ -16,6 +16,7 @@ import type { WindowManager } from "./windows.js";
 import type { ActionLocks } from "./action-locks.js";
 import { loadPlugins } from "./plugins.js";
 import { wireBotEvents } from "./wire-events.js";
+import { refreshRecipeData } from "./recipe-fix.js";
 
 export type ConnectionStatus =
   | "disconnected"
@@ -275,6 +276,7 @@ export class BotManager {
         if (settled) return;
         settled = true;
         cleanup();
+        refreshRecipeData(bot);
         this.setStatus("online");
         resolve();
       };

@@ -67,6 +67,7 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
+    "canvas": "^3.2.3",
     "minecraft-data": "^3.111.0",
     "mineflayer": "^4.37.1",
     "mineflayer-armor-manager": "^2.0.1",
@@ -80,7 +81,7 @@
     "zod": "^4.4.3"
   },
   "optionalDependencies": {
-    "playwright-core": "^1.61.1",
+    "playwright-core": "^1.63.0",
     "prismarine-viewer": "^1.33.0"
   },
   "devDependencies": {
